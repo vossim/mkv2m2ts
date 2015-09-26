@@ -131,7 +131,7 @@ then
 	done
 fi
 
-CONTAINER=$(mkvmerge -i "$MKV" | head -n 1 | cut -d':' -f3 | cut -c 2-)
+CONTAINER=$(mkvmerge -i "$MKV" | head -n 2 | grep ": container: " | tail -1 | cut -d':' -f3 | cut -c 2-)
 if [ -z "$MKV" ]
 then
 	echo "No MKV file was provided."
@@ -139,8 +139,6 @@ then
 	echo "Usage: mkv2m2ts.sh filename.mkv"
 	echo
 	exit 1
-else
-	CONTAINER=$(mkvmerge -i "$MKV" | head -n 1 | cut -d':' -f3 | cut -c 2-)
 fi
 
 if [ "$CONTAINER" != "Matroska" ]
