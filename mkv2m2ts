@@ -174,7 +174,7 @@ AVCLEVEL1=$(echo $AVCLEVEL | cut -d'.' -f1)
 AVCLEVEL2=$(echo $AVCLEVEL | cut -d'.' -f2)
 
 VIDEOTRACK=$(mkvmerge -i "$MKV" | grep video | cut -d':' -f1 | cut -d' ' -f3)
-FPS=$(mediainfo "$MKV" |grep "Frame rate" | cut -d':' -f2 | cut -d' ' -f2)
+FPS=$(mediainfo "$MKV" |grep "Frame rate" | grep "fps" | cut -d':' -f2 | cut -d' ' -f2)
 
 if [ "$NUMAUDIOTRACKS" -eq "1" ]
 then
