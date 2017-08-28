@@ -166,6 +166,7 @@ fi
 NUMAUDIOTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i "dca|dts|ac3|aac|vorbis" | wc -l)
 
 NUMENGTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i 'dca|dts|ac3|aac|vorbis' | grep English | wc -l)
+NUMENGTRACKS=$NUMAUDIOTRACKS
 
 AVCLEVEL=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Video | sed 's/;/\n/g' | grep "Format profile" | cut -d':' -f2 | cut -d'@' -f2 | tr -d 'L')
 AVCLEVEL1=$(echo $AVCLEVEL | cut -d'.' -f1)
@@ -185,7 +186,7 @@ then
 elif [ "$NUMENGTRACKS" -eq "1" ]
 then
 	SINGLEAUDIO=yes
-	echo "Single valid audio stream detected."
+	echo "Single valid eng audio stream detected."
 
 	AUDIOFORMAT=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep eng | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
 	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | grep eng | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f2 | tr -d ' ')
@@ -201,6 +202,7 @@ else
 			AUDIOFORMAT=$AUDIOFORMAT:$(mkvinfo "$MKV" | tr '\n'  '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
 			AUDIOTRACK=$AUDIOTRACK:$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Track number" | cut -f3 -d':' | cut -d' ' -f2 | cut -d')' -f1)
 			TRACKNUM=$(($TRACKNUM+1))
+                        echo "Found a track, lang: $AUDIOLANG format: $AUDIOFORMAT track: $AUDIOTRACK num: $TRACKNUM"
 		done
 	else
 		while [ $TRACKNUM -le $NUMAUDIOTRACKS ]
@@ -218,8 +220,18 @@ TRACKNUM=1
 for i in $AUDIOFORMAT
 do
 	case $i in
+		EAC3|eac3)
+			echo EAC3 audio detected, will need to convert this to AC3
+                        echo "mkvextract tracks $MKV $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):$NAME$TRACKNUM.eac3"
+			mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.eac3"
+			ffmpeg -i "$NAME$TRACKNUM.eac3" -vn -acodec ac3 -ab 448k -ac 6 -y "$NAME$TRACKNUM.ac3"
+			rm "$NAME$TRACKNUM.eac3"
+			AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+			;;
+			
 		AC3|ac3)
 			echo AC3 audio detected. Good.
+                        echo "mkvextract tracks $MKV $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):$NAME$TRACKNUM.ac3"
 			mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.ac3"
 			AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
 			;;
@@ -229,14 +241,12 @@ do
 				echo "DTS processing has been disabled. This track will be skipped. Please install dcadec (libdca0)"
 				echo
 			else
-				echo DTS audio detected. Need to transcode to AC3.
-				echo Beginning transcode.
+				echo DTS audio detected. Will embed it into a LPCM stream.
 				echo ----- EXTRACTING -----
 				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.dts"
-				echo ----- TRANSCODING -----
-				#dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
-				dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 -v 0 - "$NAME$TRACKNUM.ac3"
-				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				echo ----- Creating LPCM stream -----
+				/opt/scripts/embedDts "$NAME$TRACKNUM.dts" "$NAME$TRACKNUM.ac3"
+				PCM_AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
 				echo ----- CLEANING UP -----
 				rm "$NAME$TRACKNUM.dts"
 			fi
@@ -296,6 +306,11 @@ then
 else
 	echo V_MPEG4/ISO/AVC, "$NAME.h264", insertSEI, contSPS, lang=eng, fps=$FPS >> "$NAME".meta
 fi
+
+for i in `echo $PCM_AUDIO`
+do
+	echo A_LPCM, "`echo $i | sed -e 's/:/ /g'`" >> "$NAME".meta
+done
 
 for i in `echo $AUDIO`
 do
