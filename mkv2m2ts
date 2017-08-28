@@ -241,12 +241,14 @@ do
 				echo "DTS processing has been disabled. This track will be skipped. Please install dcadec (libdca0)"
 				echo
 			else
-				echo DTS audio detected. Will embed it into a LPCM stream.
+				echo DTS audio detected. Need to transcode to AC3.
+				echo Beginning transcode.
 				echo ----- EXTRACTING -----
 				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.dts"
-				echo ----- Creating LPCM stream -----
-				/opt/scripts/embedDts "$NAME$TRACKNUM.dts" "$NAME$TRACKNUM.ac3"
-				PCM_AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				echo ----- TRANSCODING -----
+				#dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 -v 0 - "$NAME$TRACKNUM.ac3"
+				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
 				echo ----- CLEANING UP -----
 				rm "$NAME$TRACKNUM.dts"
 			fi
@@ -306,11 +308,6 @@ then
 else
 	echo V_MPEG4/ISO/AVC, "$NAME.h264", insertSEI, contSPS, lang=eng, fps=$FPS >> "$NAME".meta
 fi
-
-for i in `echo $PCM_AUDIO`
-do
-	echo A_LPCM, "`echo $i | sed -e 's/:/ /g'`" >> "$NAME".meta
-done
 
 for i in `echo $AUDIO`
 do
